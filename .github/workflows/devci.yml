@@ -1,4 +1,4 @@
-name: CareAutomate Backend Dev CI
+name: CareAutomate Backend App CI
 
 on:
   push:
