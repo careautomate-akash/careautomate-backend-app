@@ -1,0 +1,14 @@
+node_modules
+npm-debug.log
+.env
+.git
+.gitignore
+README.md
+.vscode
+.DS_Store
+Dockerfile
+.dockerignore
+*.md
+.env.*
+# Don't ignore serviceAccountKey.json - we need it for Firebase
+# !serviceAccountKey.json

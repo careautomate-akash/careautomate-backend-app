@@ -1,0 +1,30 @@
+name: CareAutomate AppBackend Dev CD
+
+on:
+  workflow_run:
+    workflows: ['CareAutomate App Backend Dev CI']
+    types:
+      - completed
+
+jobs:
+  build:
+    runs-on: self-hosted
+
+    steps:
+      - name: Authenticate DockerHub
+        env:
+          DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
+          DOCKER_PASSWORD: ${{ secrets.DOCKER_PASSWORD }}
+        run: echo $DOCKER_PASSWORD | sudo docker login -u $DOCKER_USERNAME --password-stdin
+
+      - name: Pull Docker image
+        run: sudo docker pull arshadak2025/appbackend:latest
+
+      - name: Delete Old Docker Container
+        run: sudo docker rm -f cicd-pipeline-container-backend-app || true
+
+      - name: Run Docker Container
+        run: sudo docker run -d -p 9005:9005 --name cicd-pipeline-container-backend-app arshadak2025/appbackend:latest
+
+      - name: Restart NGINX
+        run: sudo systemctl restart nginx

@@ -1,0 +1,1341 @@
+DYNAMIC BILLING SYSTEM - TECHNICAL GUIDE
+==========================================
+
+VERSION: 1.0
+DATE: 2025-01-27
+AUTHOR: Care Automate Development Team
+
+==========================================
+TABLE OF CONTENTS
+==========================================
+
+1. SYSTEM OVERVIEW
+2. ARCHITECTURE & COMPONENTS
+3. DATA FLOW PROCESS
+4. VISIT PROCESSING ENGINE
+5. BATCH & CLAIM ORGANIZATION
+6. EDI GENERATION SYSTEM
+7. STATUS MANAGEMENT
+8. API DOCUMENTATION
+9. DATABASE SCHEMA
+10. BILLING CALCULATIONS
+11. ERROR HANDLING
+12. PERFORMANCE OPTIMIZATION
+13. SECURITY IMPLEMENTATION
+14. DEPLOYMENT GUIDE
+15. TROUBLESHOOTING
+
+==========================================
+1. SYSTEM OVERVIEW
+==========================================
+
+The Dynamic Billing System is a comprehensive healthcare billing automation platform
+designed to process healthcare visits, organize them into billing batches, generate
+insurance claims, and produce EDI (Electronic Data Interchange) files for submission
+to insurance providers.
+
+KEY FEATURES:
+- Real-time visit filtering and processing
+- Automated batch creation based on configurable time periods
+- Intelligent claim grouping by tenant, service type, and provider
+- X12 837P EDI file generation
+- Complete audit trail and status tracking
+- Multi-tenant architecture with company isolation
+- HIPAA-compliant data handling
+
+BUSINESS RULES:
+- 15 minutes = 1 billing unit
+- $17.17 per billing unit
+- Visits must be approved before billing
+- Same day visits for same tenant/HCM/service are grouped
+- Different dates create separate LX segments in EDI
+
+==========================================
+2. ARCHITECTURE & COMPONENTS
+==========================================
+
+SYSTEM ARCHITECTURE:
+┌─────────────────────────────────────────────────────────────┐
+│                    FRONTEND LAYER                           │
+│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐        │
+│  │ React UI    │  │ Filter UI   │  │ Status UI   │        │
+│  └─────────────┘  └─────────────┘  └─────────────┘        │
+└─────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────┐
+│                     API LAYER                               │
+│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐        │
+│  │ Filter API  │  │ Status API  │  │ EDI API     │        │
+│  └─────────────┘  └─────────────┘  └─────────────┘        │
+└─────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────┐
+│                  BUSINESS LOGIC LAYER                       │
+│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐        │
+│  │ Visit       │  │ Batch       │  │ EDI         │        │
+│  │ Processor   │  │ Organizer   │  │ Generator   │        │
+│  └─────────────┘  └─────────────┘  └─────────────┘        │
+└─────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────┐
+│                    DATA LAYER                               │
+│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐        │
+│  │ MongoDB     │  │ File System │  │ Audit Logs  │        │
+│  │ Database    │  │ (EDI Files) │  │ Collection  │        │
+│  └─────────────┘  └─────────────┘  └─────────────┘        │
+└─────────────────────────────────────────────────────────────┘
+
+CORE COMPONENTS:
+
+1. DYNAMIC FILTER ENGINE
+   - Real-time visit filtering
+   - Multi-criteria search
+   - Performance-optimized queries
+   - Pagination support
+
+2. VISIT PROCESSOR
+   - Time calculation engine
+   - Unit calculation (15-min intervals)
+   - Amount calculation ($17.17/unit)
+   - Status validation
+
+3. BATCH ORGANIZER
+   - Intelligent grouping algorithms
+   - Date-based sub-batching
+   - Configurable time periods
+   - Claim generation
+
+4. EDI GENERATOR
+   - X12 837P format compliance
+   - Service line creation
+   - LX segment generation
+   - File output management
+
+5. STATUS MANAGER
+   - State transition validation
+   - Audit trail creation
+   - User permission checking
+   - Concurrent update handling
+
+==========================================
+3. DATA FLOW PROCESS
+==========================================
+
+COMPLETE DATA FLOW:
+
+1. VISIT CREATION & APPROVAL
+   ┌─────────────┐    ┌─────────────┐    ┌─────────────┐
+   │ HCM Creates │───▶│ Admin       │───▶│ Visit       │
+   │ Visit       │    │ Reviews     │    │ Approved    │
+   └─────────────┘    └─────────────┘    └─────────────┘
+
+2. DYNAMIC FILTERING
+   ┌─────────────┐    ┌─────────────┐    ┌─────────────┐
+   │ User Applies│───▶│ Filter      │───▶│ Matching    │
+   │ Filters     │    │ Engine      │    │ Visits      │
+   └─────────────┘    └─────────────┘    └─────────────┘
+
+3. VISIT ENHANCEMENT
+   ┌─────────────┐    ┌─────────────┐    ┌─────────────┐
+   │ Raw Visit   │───▶│ Calculate   │───▶│ Enhanced    │
+   │ Data        │    │ Time/Units  │    │ Visit       │
+   └─────────────┘    └─────────────┘    └─────────────┘
+
+4. BATCH ORGANIZATION
+   ┌─────────────┐    ┌─────────────┐    ┌─────────────┐
+   │ Enhanced    │───▶│ Group by    │───▶│ Organized   │
+   │ Visits      │    │ Tenant/HCM  │    │ Batches     │
+   └─────────────┘    └─────────────┘    └─────────────┘
+
+5. CLAIM GENERATION
+   ┌─────────────┐    ┌─────────────┐    ┌─────────────┐
+   │ Organized   │───▶│ Create      │───▶│ Claims with │
+   │ Batches     │    │ Claims      │    │ Unique IDs  │
+   └─────────────┘    └─────────────┘    └─────────────┘
+
+6. EDI GENERATION
+   ┌─────────────┐    ┌─────────────┐    ┌─────────────┐
+   │ Claims      │───▶│ Generate    │───▶│ EDI Files   │
+   │ Data        │    │ X12 837P    │    │ (.txt)      │
+   └─────────────┘    └─────────────┘    └─────────────┘
+
+7. STATUS TRACKING
+   ┌─────────────┐    ┌─────────────┐    ┌─────────────┐
+   │ User        │───▶│ Update      │───▶│ Audit       │
+   │ Actions     │    │ Status      │    │ Trail       │
+   └─────────────┘    └─────────────┘    └─────────────┘
+
+==========================================
+4. VISIT PROCESSING ENGINE
+==========================================
+
+VISIT ENHANCEMENT ALGORITHM:
+
+STEP 1: TIME CALCULATION
+```
+INPUT: startTime, endTime
+PROCESS:
+  IF startTime AND endTime exist:
+    timeInHours = (endTime - startTime) / (1000 * 60 * 60)
+  ELSE:
+    timeInHours = 1.0  // Default to 1 hour
+  END IF
+OUTPUT: timeInHours (rounded to 2 decimal places)
+```
+
+STEP 2: UNIT CALCULATION
+```
+INPUT: timeInHours
+PROCESS:
+  timeInMinutes = timeInHours * 60
+  units = Math.max(1, Math.ceil(timeInMinutes / 15))
+OUTPUT: units (minimum 1 unit)
+```
+
+STEP 3: AMOUNT CALCULATION
+```
+INPUT: units
+PROCESS:
+  ratePerUnit = 17.17
+  calculatedAmount = units * ratePerUnit
+OUTPUT: calculatedAmount (rounded to 2 decimal places)
+```
+
+EXAMPLE CALCULATIONS:
+
+Visit 1: 30 minutes
+- timeInHours = 0.5
+- units = Math.ceil(30 / 15) = 2
+- amount = 2 * $17.17 = $34.34
+
+Visit 2: 90 minutes  
+- timeInHours = 1.5
+- units = Math.ceil(90 / 15) = 6
+- amount = 6 * $17.17 = $103.02
+
+Visit 3: 10 minutes
+- timeInHours = 0.17
+- units = Math.max(1, Math.ceil(10 / 15)) = 1
+- amount = 1 * $17.17 = $17.17
+
+VISIT STATUS LIFECYCLE:
+
+not_scheduled ──schedule──▶ scheduled ──submit──▶ submitted ──bill──▶ billed
+      │                        │                     │
+      │                        │                     │
+      └────────cancel──────────┼─────────cancel─────┘
+                               │
+                               ▼
+                          cancelled
+
+BUSINESS RULES:
+- Cannot reschedule submitted or billed visits
+- Cannot submit cancelled visits  
+- Cannot cancel billed visits
+- Can only bill submitted visits
+- Cancelled and billed are final states
+
+==========================================
+5. BATCH & CLAIM ORGANIZATION
+==========================================
+
+GROUPING STRATEGY:
+
+PRIMARY GROUPING (Tenant + Service + HCM):
+```
+groupKey = tenantId + "_" + serviceType + "_" + hcmId
+```
+
+SECONDARY GROUPING (Date-based Sub-batching):
+```
+groupKey = tenantId + "_" + visitDate + "_" + hcmId + "_" + serviceType
+```
+
+TIME PERIOD CALCULATION:
+
+```
+FUNCTION calculateTimePeriod(startDate, endDate):
+  IF no dates provided:
+    RETURN 15  // Default 15 days
+  
+  daysDiff = (endDate - startDate) in days
+  
+  IF daysDiff <= 7:
+    RETURN max(daysDiff, 7)  // At least 7 days
+  ELSE IF daysDiff <= 15:
+    RETURN 15
+  ELSE IF daysDiff <= 30:
+    RETURN 15  // Split into 15-day periods
+  ELSE:
+    RETURN 15  // Always use 15-day periods
+  END IF
+END FUNCTION
+```
+
+BATCH CREATION ALGORITHM:
+
+```
+FOR each tenant_service_hcm group:
+  1. Sort visits by date chronologically
+  2. Create date-based sub-batches:
+     - Start new batch if visit date > (current_batch_start + time_period)
+     - Add visit to current batch otherwise
+  3. Generate unique batch ID: BATCH_{counter}_{year}_{month}_{counter}
+  4. Generate unique claim ID: CLAIM_{counter}_{year}_{month}_{counter}
+  5. Calculate totals: amount, units, visit count
+  6. Set status based on visit statuses
+  7. Update visits with batch and claim IDs
+END FOR
+```
+
+EXAMPLE BATCH ORGANIZATION:
+
+Input Visits:
+- Visit A: 2025-01-15, Tenant1, HCM1, Housing Transition
+- Visit B: 2025-01-16, Tenant1, HCM1, Housing Transition  
+- Visit C: 2025-01-20, Tenant1, HCM2, Housing Transition
+- Visit D: 2025-02-01, Tenant1, HCM1, Housing Transition
+
+Output Batches:
+- Batch 1: Visits A+B (same tenant, HCM, service, close dates)
+- Batch 2: Visit C (different HCM)
+- Batch 3: Visit D (different month, new period)
+
+==========================================
+6. EDI GENERATION SYSTEM
+==========================================
+
+EDI STRUCTURE (X12 837P Professional Claims):
+
+HEADER SEGMENTS:
+ISA - Interchange Control Header
+GS  - Functional Group Header  
+ST  - Transaction Set Header
+BHT - Beginning of Hierarchical Transaction
+
+ENTITY SEGMENTS:
+NM1*41 - Submitter Name
+PER*IC - Submitter Contact
+NM1*40 - Receiver Name
+
+PROVIDER HIERARCHY:
+HL*1   - Billing Provider Level
+NM1*85 - Billing Provider Name
+N3     - Billing Provider Address
+N4     - Billing Provider City/State/ZIP
+REF*EI - Billing Provider Tax ID
+
+SUBSCRIBER HIERARCHY:
+HL*2   - Subscriber Level
+SBR    - Subscriber Information
+NM1*IL - Subscriber Name
+N3     - Subscriber Address
+N4     - Subscriber City/State/ZIP
+DMG    - Subscriber Demographics
+
+PATIENT HIERARCHY:
+HL*3   - Patient Level
+PAT    - Patient Information
+NM1*QC - Patient Name
+
+CLAIM HIERARCHY:
+HL*4   - Claim Level
+CLM    - Claim Information
+DTP*434 - Statement From Date
+DTP*435 - Statement To Date
+
+SERVICE LINE SEGMENTS (Multiple LX segments):
+LX*1   - Service Line Number 1
+SV1    - Professional Service 1
+DTP*472 - Service Date 1
+REF*6R - Service Line Reference 1
+
+LX*2   - Service Line Number 2
+SV1    - Professional Service 2
+DTP*472 - Service Date 2
+REF*6R - Service Line Reference 2
+
+TRAILER SEGMENTS:
+SE  - Transaction Set Trailer
+GE  - Functional Group Trailer
+IEA - Interchange Control Trailer
+
+LX SEGMENT GENERATION LOGIC:
+
+```
+FUNCTION generateServiceLines(visitGroups):
+  serviceLines = []
+  lxCounter = 1
+  
+  // Sort groups by date, then HCM, then service
+  sortedGroups = sort(visitGroups, [date, hcmName, serviceType])
+  
+  FOR each group in sortedGroups:
+    serviceLine = {
+      lxSequence: lxCounter++,
+      serviceDate: group.visitDate,
+      serviceType: group.serviceType,
+      procedureCode: getProcedureCode(group.serviceType),
+      lineItemChargeAmount: group.totalAmount,
+      serviceUnitCount: group.totalUnits,
+      hcmName: group.hcmId.name,
+      visitCount: group.visits.length
+    }
+    serviceLines.push(serviceLine)
+  END FOR
+  
+  RETURN serviceLines
+END FUNCTION
+```
+
+PROCEDURE CODE MAPPING:
+
+```
+serviceCodeMap = {
+  'Housing Transition': 'H2015',
+  'Housing Sustaining': 'H2015', 
+  'Individual Employment': 'H2023',
+  'Group Employment': 'H2025',
+  'Individual Skills': 'H2014',
+  'Group Skills': 'H2021',
+  'Individual Community': 'H2017',
+  'Group Community': 'H2021',
+  'Housing Consultation': 'T2024',
+  'Moving Expenses': 'T2038',
+  'default': 'H2015'
+}
+```
+
+EXAMPLE EDI OUTPUT:
+
+```
+ISA*00*          *00*          *ZZ*SENDER123      *ZZ*RECEIVER456    *20250127*1430*U*00401*000000001*0*P*>~
+GS*HC*SENDER123*RECEIVER456*20250127*1430*1*X*005010X222A1~
+ST*837*0001~
+BHT*0019*00*CLAIM12345*20250127*1430*CH~
+NM1*41*2*HEALTHCARE PROVIDER*****46*1234567890~
+PER*IC*CONTACT NAME*TE*5551234567~
+NM1*40*2*INSURANCE COMPANY*****46*RECEIVER456~
+HL*1**20*1~
+NM1*85*2*HEALTHCARE PROVIDER*****XX*1234567890~
+N3*123 PROVIDER STREET~
+N4*MINNEAPOLIS*MN*55401~
+REF*EI*123456789~
+HL*2*1*22*1~
+SBR*P*18*GROUP123******CI~
+NM1*IL*1*DOE*JOHN****MI*MEMBER123~
+N3*456 PATIENT AVENUE~
+N4*MINNEAPOLIS*MN*55402~
+DMG*D8*19850615*M~
+HL*3*2*23*0~
+PAT*19~
+NM1*QC*1*DOE*JOHN~
+HL*4*3*23*0~
+CLM*CLAIM12345*137.51***11:A:1***A~
+DTP*434*D8*20250115~
+DTP*435*D8*20250116~
+LX*1~
+SV1*H2015*34.34*UN*2***1~
+DTP*472*D8*20250115~
+REF*6R*CLAIM12345~
+LX*2~
+SV1*H2015*103.02*UN*6***1~
+DTP*472*D8*20250116~
+REF*6R*CLAIM12345~
+SE*25*0001~
+GE*1*1~
+IEA*1*000000001~
+```
+
+==========================================
+7. STATUS MANAGEMENT
+==========================================
+
+STATUS TRANSITION VALIDATION:
+
+```
+FUNCTION validateStatusTransition(currentStatus, newAction):
+  validTransitions = {
+    'not_scheduled': ['schedule', 'cancel'],
+    'scheduled': ['submit', 'cancel', 'schedule'],
+    'submitted': ['bill', 'cancel'],
+    'billed': [],
+    'cancelled': []
+  }
+  
+  IF newAction NOT IN validTransitions[currentStatus]:
+    THROW "Invalid status transition"
+  END IF
+  
+  RETURN true
+END FUNCTION
+```
+
+STATUS UPDATE PROCESS:
+
+```
+FUNCTION updateVisitStatus(visitIds, action, additionalData):
+  results = { successful: [], failed: [] }
+  
+  FOR each visitId:
+    TRY:
+      visit = findVisit(visitId)
+      validateStatusTransition(visit.claimStatus, action)
+      
+      updateData = buildUpdateData(action, additionalData)
+      updatedVisit = updateVisit(visitId, updateData)
+      
+      logAuditAction(visitId, action, updateData)
+      results.successful.push(visitId)
+      
+    CATCH error:
+      results.failed.push({visitId, error})
+    END TRY
+  END FOR
+  
+  RETURN results
+END FUNCTION
+```
+
+AUDIT LOGGING:
+
+```
+FUNCTION logAuditAction(actionData):
+  auditRecord = {
+    companyId: actionData.companyId,
+    userId: actionData.userId,
+    entityType: actionData.entityType,
+    entityId: actionData.entityId,
+    action: actionData.action,
+    description: actionData.description,
+    metadata: {
+      previousStatus: actionData.previousStatus,
+      newStatus: actionData.newStatus,
+      updateData: actionData.updateData,
+      timestamp: new Date(),
+      userAgent: actionData.userAgent,
+      ipAddress: actionData.ipAddress
+    }
+  }
+  
+  saveAuditRecord(auditRecord)
+END FUNCTION
+```
+
+==========================================
+8. API DOCUMENTATION
+==========================================
+
+ENDPOINT: POST /api/dynamic-bills/apply-filters
+
+PURPOSE: Apply dynamic filters to retrieve and organize visits into batches and claims
+
+REQUEST BODY:
+```json
+{
+  "companyId": "507f1f77bcf86cd799439011",
+  "startDate": "2025-01-01",
+  "endDate": "2025-01-31", 
+  "tenantIds": ["507f1f77bcf86cd799439012"],
+  "hcmIds": ["507f1f77bcf86cd799439013"],
+  "serviceTypes": ["Housing Transition"],
+  "visitStatuses": ["approved"],
+  "claimStatuses": ["not_scheduled", "scheduled"],
+  "includeSubmitted": false,
+  "page": 1,
+  "limit": 1000
+}
+```
+
+RESPONSE:
+```json
+{
+  "success": true,
+  "message": "Filters applied successfully",
+  "data": {
+    "visits": [...],
+    "groupedVisits": [...],
+    "batches": [...],
+    "claims": [...],
+    "ediGenerationResults": {
+      "successful": 5,
+      "errors": []
+    },
+    "summary": {
+      "totalVisits": 25,
+      "totalBatches": 3,
+      "totalClaims": 5,
+      "statusBreakdown": {
+        "not_scheduled": 15,
+        "scheduled": 10
+      }
+    },
+    "pagination": {
+      "currentPage": 1,
+      "totalPages": 1,
+      "totalRecords": 25,
+      "hasNextPage": false,
+      "hasPrevPage": false
+    },
+    "performance": {
+      "executionTimeMs": 1250
+    }
+  }
+}
+```
+
+ENDPOINT: POST /api/dynamic-bills/update-status
+
+PURPOSE: Update status of multiple visits (schedule, submit, cancel, bill)
+
+REQUEST BODY:
+```json
+{
+  "visitIds": ["507f1f77bcf86cd799439014", "507f1f77bcf86cd799439015"],
+  "action": "schedule",
+  "scheduledDate": "2025-02-01T00:00:00.000Z",
+  "cancellationReason": "Patient request",
+  "companyId": "507f1f77bcf86cd799439011"
+}
+```
+
+RESPONSE:
+```json
+{
+  "success": true,
+  "message": "Visit status update completed: 2 successful, 0 failed",
+  "data": {
+    "results": {
+      "successful": [
+        {
+          "visitId": "507f1f77bcf86cd799439014",
+          "action": "schedule",
+          "previousStatus": "not_scheduled",
+          "newStatus": "scheduled"
+        }
+      ],
+      "failed": []
+    },
+    "summary": {
+      "totalProcessed": 2,
+      "successful": 2,
+      "failed": 0,
+      "action": "schedule"
+    }
+  }
+}
+```
+
+ENDPOINT: POST /api/dynamic-bills/generate-edi/:visitId
+
+PURPOSE: Generate EDI file for individual visit
+
+RESPONSE:
+```json
+{
+  "success": true,
+  "message": "EDI generated successfully for visit",
+  "data": {
+    "visitId": "507f1f77bcf86cd799439014",
+    "ediFileName": "VISIT_507f1f77bcf86cd799439014_1640995200000.txt",
+    "ediFilePath": "/uploads/ediFiles/VISIT_507f1f77bcf86cd799439014_1640995200000.txt",
+    "fileSize": 2048,
+    "ediContent": "ISA*00*...",
+    "performance": {
+      "executionTimeMs": 500
+    }
+  }
+}
+```
+
+ENDPOINT: POST /api/dynamic-bills/generate-batch-edi/:batchId
+
+PURPOSE: Generate EDI file for entire batch or specific claim
+
+REQUEST BODY:
+```json
+{
+  "companyId": "507f1f77bcf86cd799439011",
+  "claimId": "CLAIM_123_2025_1_456"
+}
+```
+
+RESPONSE:
+```json
+{
+  "success": true,
+  "message": "EDI generated successfully",
+  "data": {
+    "batchId": "BATCH_123_2025_1_456",
+    "claimId": "CLAIM_123_2025_1_456",
+    "ediFileName": "BATCH_123_2025_1_456_1640995200000.txt",
+    "ediFilePath": "/uploads/ediFiles/BATCH_123_2025_1_456_1640995200000.txt",
+    "fileSize": 4096,
+    "visitCount": 5,
+    "ediContent": "ISA*00*...",
+    "performance": {
+      "executionTimeMs": 1200
+    }
+  }
+}
+```
+
+==========================================
+9. DATABASE SCHEMA
+==========================================
+
+VISITS COLLECTION:
+
+```javascript
+{
+  _id: ObjectId("507f1f77bcf86cd799439011"),
+  companyId: ObjectId("507f1f77bcf86cd799439012"),
+  tenantId: ObjectId("507f1f77bcf86cd799439013"),
+  hcmId: ObjectId("507f1f77bcf86cd799439014"),
+  
+  // Visit Details
+  date: ISODate("2025-01-15T00:00:00.000Z"),
+  startTime: ISODate("2025-01-15T14:00:00.000Z"),
+  endTime: ISODate("2025-01-15T15:30:00.000Z"),
+  serviceType: "Housing Transition",
+  activity: "Supporting housing search",
+  methodOfContact: "in_person",
+  placeOfService: "Community",
+  
+  // Status Fields
+  status: "approved",           // Visit approval status
+  claimStatus: "scheduled",     // Billing status
+  
+  // Calculated Fields
+  timeInHours: 1.5,
+  calculatedUnits: 6,
+  calculatedAmount: 103.02,
+  claimAmount: 103.02,
+  claimUnits: 6,
+  
+  // Batch & Claim Tracking
+  batchId: "BATCH_123_2025_1_456",
+  claimId: "CLAIM_123_2025_1_456",
+  
+  // EDI Fields
+  ediGenerated: true,
+  ediGeneratedDate: ISODate("2025-01-15T16:00:00.000Z"),
+  ediFileName: "CLAIM_123_2025_1_456_1640995200000.txt",
+  ediContent: "ISA*00*...",
+  
+  // Status Tracking
+  scheduledDate: ISODate("2025-01-20T00:00:00.000Z"),
+  scheduledBy: ObjectId("507f1f77bcf86cd799439015"),
+  submittedDate: null,
+  submittedBy: null,
+  cancelledDate: null,
+  cancelledBy: null,
+  cancellationReason: null,
+  billedDate: null,
+  billedBy: null,
+  
+  // Audit Fields
+  createdAt: ISODate("2025-01-15T12:00:00.000Z"),
+  updatedAt: ISODate("2025-01-15T16:00:00.000Z"),
+  createdBy: ObjectId("507f1f77bcf86cd799439016"),
+  lastModifiedBy: ObjectId("507f1f77bcf86cd799439015")
+}
+```
+
+AUDIT LOG COLLECTION:
+
+```javascript
+{
+  _id: ObjectId("507f1f77bcf86cd799439020"),
+  companyId: ObjectId("507f1f77bcf86cd799439012"),
+  userId: ObjectId("507f1f77bcf86cd799439015"),
+  
+  // Action Details
+  entityType: "visit",
+  entityId: "507f1f77bcf86cd799439011",
+  action: "visit_scheduled",
+  description: "Visit scheduled successfully",
+  
+  // Metadata
+  metadata: {
+    previousStatus: "not_scheduled",
+    newStatus: "scheduled",
+    updateData: {
+      claimStatus: "scheduled",
+      scheduledDate: ISODate("2025-01-20T00:00:00.000Z"),
+      scheduledBy: ObjectId("507f1f77bcf86cd799439015")
+    },
+    performance: {
+      executionTimeMs: 250
+    },
+    userAgent: "Mozilla/5.0...",
+    ipAddress: "192.168.1.100"
+  },
+  
+  // Timestamp
+  timestamp: ISODate("2025-01-15T16:00:00.000Z")
+}
+```
+
+DATABASE INDEXES:
+
+```javascript
+// Compound indexes for efficient filtering
+db.visits.createIndex({ 
+  companyId: 1, 
+  date: 1, 
+  claimStatus: 1 
+});
+
+db.visits.createIndex({ 
+  companyId: 1, 
+  tenantId: 1, 
+  hcmId: 1 
+});
+
+db.visits.createIndex({ 
+  companyId: 1, 
+  serviceType: 1, 
+  date: 1 
+});
+
+db.visits.createIndex({ batchId: 1 });
+db.visits.createIndex({ claimId: 1 });
+
+// Audit log indexes
+db.auditlogs.createIndex({ 
+  companyId: 1, 
+  timestamp: -1 
+});
+
+db.auditlogs.createIndex({ 
+  entityType: 1, 
+  entityId: 1, 
+  timestamp: -1 
+});
+```
+
+==========================================
+10. BILLING CALCULATIONS
+==========================================
+
+DETAILED CALCULATION EXAMPLES:
+
+SCENARIO 1: Standard Visit
+- Start Time: 2:00 PM
+- End Time: 3:30 PM
+- Duration: 90 minutes
+
+Calculation:
+- timeInHours = 1.5
+- units = Math.ceil(90 / 15) = 6 units
+- amount = 6 × $17.17 = $103.02
+
+SCENARIO 2: Short Visit
+- Start Time: 10:00 AM  
+- End Time: 10:10 AM
+- Duration: 10 minutes
+
+Calculation:
+- timeInHours = 0.17
+- units = Math.max(1, Math.ceil(10 / 15)) = 1 unit (minimum)
+- amount = 1 × $17.17 = $17.17
+
+SCENARIO 3: Extended Visit
+- Start Time: 9:00 AM
+- End Time: 1:00 PM  
+- Duration: 240 minutes (4 hours)
+
+Calculation:
+- timeInHours = 4.0
+- units = Math.ceil(240 / 15) = 16 units
+- amount = 16 × $17.17 = $274.72
+
+SCENARIO 4: Multiple Visits Same Day
+Visit A: 30 minutes = 2 units = $34.34
+Visit B: 45 minutes = 3 units = $51.51
+Visit C: 60 minutes = 4 units = $68.68
+
+Same Day Total:
+- Combined units = 2 + 3 + 4 = 9 units
+- Combined amount = $34.34 + $51.51 + $68.68 = $154.53
+- EDI: Single LX segment with 9 units and $154.53
+
+SCENARIO 5: Cross-Day Visits
+Day 1: 60 minutes = 4 units = $68.68
+Day 2: 90 minutes = 6 units = $103.02
+
+EDI Output:
+- LX*1 segment: 4 units, $68.68 (Day 1)
+- LX*2 segment: 6 units, $103.02 (Day 2)
+
+ROUNDING RULES:
+- Time calculations: Round to 2 decimal places
+- Unit calculations: Always round UP (ceiling)
+- Amount calculations: Round to 2 decimal places
+- Minimum billing: 1 unit (15 minutes)
+
+==========================================
+11. ERROR HANDLING
+==========================================
+
+ERROR CATEGORIES:
+
+1. VALIDATION ERRORS
+   - Missing required fields
+   - Invalid data types
+   - Business rule violations
+   - Date range validation
+
+2. BUSINESS LOGIC ERRORS
+   - Invalid status transitions
+   - Duplicate batch/claim IDs
+   - Calculation errors
+   - EDI generation failures
+
+3. SYSTEM ERRORS
+   - Database connection failures
+   - File system errors
+   - Memory/performance issues
+   - Third-party service failures
+
+ERROR RESPONSE FORMAT:
+
+```json
+{
+  "success": false,
+  "message": "Human-readable error message",
+  "error": "Detailed technical error",
+  "code": "ERROR_CODE",
+  "timestamp": "2025-01-27T14:30:00.000Z",
+  "requestId": "req_1640995200000_abc123",
+  "details": {
+    "field": "startDate",
+    "value": "invalid-date",
+    "constraint": "Must be valid ISO date"
+  }
+}
+```
+
+COMMON ERROR CODES:
+
+VALIDATION_ERROR_001: Invalid date format
+VALIDATION_ERROR_002: Missing required field
+VALIDATION_ERROR_003: Invalid data type
+
+BUSINESS_ERROR_001: Invalid status transition
+BUSINESS_ERROR_002: Duplicate identifier
+BUSINESS_ERROR_003: Calculation error
+
+SYSTEM_ERROR_001: Database connection failed
+SYSTEM_ERROR_002: File system error
+SYSTEM_ERROR_003: Memory limit exceeded
+
+EDI_ERROR_001: Missing patient information
+EDI_ERROR_002: Invalid service code
+EDI_ERROR_003: File generation failed
+
+ERROR HANDLING STRATEGY:
+
+```javascript
+function handleError(error, context) {
+  // Log error with context
+  logger.error('Error occurred', {
+    error: error.message,
+    stack: error.stack,
+    context: context,
+    timestamp: new Date(),
+    requestId: context.requestId
+  });
+  
+  // Determine error type and response
+  if (error instanceof ValidationError) {
+    return {
+      success: false,
+      code: 'VALIDATION_ERROR',
+      message: error.message,
+      details: error.details
+    };
+  }
+  
+  if (error instanceof BusinessError) {
+    return {
+      success: false,
+      code: 'BUSINESS_ERROR', 
+      message: error.message,
+      details: error.details
+    };
+  }
+  
+  // Generic system error
+  return {
+    success: false,
+    code: 'SYSTEM_ERROR',
+    message: 'An unexpected error occurred',
+    details: { requestId: context.requestId }
+  };
+}
+```
+
+==========================================
+12. PERFORMANCE OPTIMIZATION
+==========================================
+
+DATABASE OPTIMIZATION:
+
+1. INDEXING STRATEGY
+   - Compound indexes for filter queries
+   - Single field indexes for lookups
+   - TTL indexes for audit log cleanup
+   - Sparse indexes for optional fields
+
+2. QUERY OPTIMIZATION
+   - Use lean() for read-only operations
+   - Populate only required fields
+   - Implement aggregation pipelines
+   - Use projection to limit returned fields
+
+3. CONNECTION MANAGEMENT
+   - Connection pooling
+   - Connection reuse
+   - Timeout configuration
+   - Error handling
+
+MEMORY OPTIMIZATION:
+
+1. PAGINATION
+   - Limit query results
+   - Implement cursor-based pagination
+   - Stream large datasets
+   - Lazy loading for related data
+
+2. CACHING
+   - Cache frequently accessed data
+   - Redis for session management
+   - In-memory caching for reference data
+   - Cache invalidation strategies
+
+APPLICATION OPTIMIZATION:
+
+1. ASYNCHRONOUS PROCESSING
+   - Background EDI generation
+   - Batch status updates
+   - Queue-based processing
+   - Worker thread utilization
+
+2. CODE OPTIMIZATION
+   - Minimize object creation
+   - Reuse database connections
+   - Optimize loops and iterations
+   - Use efficient data structures
+
+MONITORING METRICS:
+
+1. PERFORMANCE METRICS
+   - API response times
+   - Database query times
+   - Memory usage
+   - CPU utilization
+
+2. BUSINESS METRICS
+   - Visit processing rates
+   - EDI generation success rates
+   - Error rates by endpoint
+   - User activity patterns
+
+==========================================
+13. SECURITY IMPLEMENTATION
+==========================================
+
+AUTHENTICATION & AUTHORIZATION:
+
+1. JWT TOKEN MANAGEMENT
+   - Token generation and validation
+   - Refresh token mechanism
+   - Token expiration handling
+   - Secure token storage
+
+2. ROLE-BASED ACCESS CONTROL
+   - User role validation
+   - Permission checking
+   - Company-based isolation
+   - API endpoint protection
+
+DATA PROTECTION:
+
+1. ENCRYPTION
+   - Data at rest encryption
+   - Data in transit encryption (HTTPS)
+   - Database field encryption
+   - File system encryption
+
+2. PII PROTECTION
+   - Data masking in logs
+   - Secure data transmission
+   - HIPAA compliance
+   - Audit trail protection
+
+INPUT VALIDATION:
+
+1. REQUEST VALIDATION
+   - Schema validation
+   - Input sanitization
+   - SQL injection prevention
+   - XSS protection
+
+2. BUSINESS RULE VALIDATION
+   - Status transition validation
+   - Date range validation
+   - User permission validation
+   - Data integrity checks
+
+SECURITY HEADERS:
+
+```javascript
+app.use((req, res, next) => {
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-Frame-Options', 'DENY');
+  res.setHeader('X-XSS-Protection', '1; mode=block');
+  res.setHeader('Strict-Transport-Security', 'max-age=31536000');
+  next();
+});
+```
+
+==========================================
+14. DEPLOYMENT GUIDE
+==========================================
+
+ENVIRONMENT SETUP:
+
+DEVELOPMENT:
+```bash
+NODE_ENV=development
+PORT=3001
+MONGODB_URI=mongodb://localhost:27017/care-automate-dev
+JWT_SECRET=dev-secret-key
+UPLOADS_DIR=./uploads
+LOG_LEVEL=debug
+```
+
+STAGING:
+```bash
+NODE_ENV=staging
+PORT=3001
+MONGODB_URI=mongodb://staging-db:27017/care-automate-staging
+JWT_SECRET=staging-secret-key
+UPLOADS_DIR=/app/uploads
+LOG_LEVEL=info
+```
+
+PRODUCTION:
+```bash
+NODE_ENV=production
+PORT=3001
+MONGODB_URI=mongodb://prod-cluster:27017/care-automate-prod
+JWT_SECRET=prod-secret-key-very-long-and-secure
+UPLOADS_DIR=/app/uploads
+LOG_LEVEL=warn
+```
+
+DEPLOYMENT STEPS:
+
+1. PRE-DEPLOYMENT
+   - Run unit tests
+   - Run integration tests
+   - Database migration scripts
+   - Backup current database
+
+2. DEPLOYMENT
+   - Deploy application code
+   - Update environment variables
+   - Restart application services
+   - Verify health checks
+
+3. POST-DEPLOYMENT
+   - Smoke tests
+   - Monitor error logs
+   - Performance monitoring
+   - User acceptance testing
+
+DOCKER CONFIGURATION:
+
+```dockerfile
+FROM node:18-alpine
+
+WORKDIR /app
+
+COPY package*.json ./
+RUN npm ci --only=production
+
+COPY . .
+
+EXPOSE 3001
+
+CMD ["npm", "start"]
+```
+
+HEALTH CHECK ENDPOINT:
+
+```javascript
+app.get('/health', (req, res) => {
+  res.status(200).json({
+    status: 'healthy',
+    timestamp: new Date().toISOString(),
+    version: process.env.npm_package_version,
+    uptime: process.uptime(),
+    memory: process.memoryUsage()
+  });
+});
+```
+
+==========================================
+15. TROUBLESHOOTING
+==========================================
+
+COMMON ISSUES:
+
+1. EDI GENERATION FAILURES
+
+Problem: EDI files not generating
+Symptoms: Empty or missing EDI files
+Diagnosis:
+- Check patient information completeness
+- Verify service code mappings
+- Check file system permissions
+- Review error logs
+
+Solution:
+- Ensure all required patient fields are present
+- Verify procedure code mappings
+- Check disk space and permissions
+- Review and fix data validation errors
+
+2. PERFORMANCE ISSUES
+
+Problem: Slow API responses
+Symptoms: High response times, timeouts
+Diagnosis:
+- Check database query performance
+- Monitor memory usage
+- Review index usage
+- Analyze slow query logs
+
+Solution:
+- Optimize database queries
+- Add missing indexes
+- Implement pagination
+- Increase server resources
+
+3. STATUS UPDATE FAILURES
+
+Problem: Visit status not updating
+Symptoms: Status remains unchanged
+Diagnosis:
+- Check status transition rules
+- Verify user permissions
+- Review validation errors
+- Check concurrent updates
+
+Solution:
+- Validate status transition logic
+- Verify user has required permissions
+- Fix validation rule violations
+- Implement optimistic locking
+
+4. DATE FILTERING ISSUES
+
+Problem: Incorrect date filtering results
+Symptoms: Missing or extra visits
+Diagnosis:
+- Check timezone handling
+- Verify date format parsing
+- Review filter logic
+- Check database date storage
+
+Solution:
+- Use UTC dates consistently
+- Implement proper timezone conversion
+- Fix date parsing logic
+- Verify database date formats
+
+DEBUGGING COMMANDS:
+
+```bash
+# Check application logs
+tail -f /var/log/care-automate/app.log
+
+# Monitor database queries
+db.setProfilingLevel(2)
+db.system.profile.find().sort({ts: -1}).limit(5)
+
+# Check memory usage
+ps aux | grep node
+free -h
+
+# Verify file permissions
+ls -la /app/uploads/ediFiles/
+
+# Test database connection
+mongo mongodb://localhost:27017/care-automate --eval "db.stats()"
+```
+
+LOG ANALYSIS:
+
+```bash
+# Find error patterns
+grep "ERROR" /var/log/care-automate/app.log | tail -20
+
+# Monitor API response times
+grep "API Response Time" /var/log/care-automate/app.log | awk '{print $NF}' | sort -n
+
+# Check EDI generation success rate
+grep "EDI generated" /var/log/care-automate/app.log | wc -l
+grep "EDI generation failed" /var/log/care-automate/app.log | wc -l
+```
+
+EMERGENCY PROCEDURES:
+
+1. SYSTEM OUTAGE
+   - Check application health endpoint
+   - Restart application services
+   - Verify database connectivity
+   - Check system resources
+
+2. DATA CORRUPTION
+   - Stop application immediately
+   - Restore from latest backup
+   - Verify data integrity
+   - Resume operations
+
+3. PERFORMANCE DEGRADATION
+   - Monitor system metrics
+   - Identify bottlenecks
+   - Scale resources if needed
+   - Optimize queries
+
+==========================================
+CONCLUSION
+==========================================
+
+The Dynamic Billing System provides a comprehensive solution for healthcare
+billing automation with the following key benefits:
+
+- Automated visit processing and enhancement
+- Intelligent batch and claim organization  
+- Standards-compliant EDI generation
+- Complete audit trail and status tracking
+- Scalable and performant architecture
+- HIPAA-compliant security implementation
+
+The system's modular design allows for easy maintenance and future enhancements
+while ensuring reliable operation in production healthcare environments.
+
+For additional support or questions, please contact the development team or
+refer to the project documentation repository.
+
+==========================================
+END OF DOCUMENT
+========================================== 

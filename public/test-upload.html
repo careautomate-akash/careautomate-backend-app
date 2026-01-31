@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Profile Image Upload Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        h1 {
+            color: #333;
+        }
+        .form-group {
+            margin-bottom: 20px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        input {
+            width: 100%;
+            padding: 8px;
+            box-sizing: border-box;
+        }
+        button {
+            background-color: #4CAF50;
+            color: white;
+            padding: 10px 15px;
+            border: none;
+            cursor: pointer;
+        }
+        #preview {
+            margin-top: 20px;
+            text-align: center;
+        }
+        #preview img {
+            max-width: 100%;
+            max-height: 300px;
+            border: 1px solid #ddd;
+        }
+        #result {
+            margin-top: 20px;
+            padding: 10px;
+            border: 1px solid #ddd;
+            background-color: #f9f9f9;
+            white-space: pre-wrap;
+        }
+    </style>
+</head>
+<body>
+    <h1>Profile Image Upload Test</h1>
+    
+    <div class="form-group">
+        <label for="userId">User ID:</label>
+        <input type="text" id="userId" name="userId" placeholder="Enter user ID">
+    </div>
+    
+    <div class="form-group">
+        <label for="profileImage">Select Image:</label>
+        <input type="file" id="profileImage" name="profileImage" accept="image/*">
+    </div>
+
+    <div id="preview"></div>
+    
+    <button id="uploadBtn">Upload Image</button>
+    <button id="testUpdateBtn">Test Update Endpoint</button>
+    
+    <div id="result"></div>
+    
+    <script>
+        document.getElementById('profileImage').addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = function(event) {
+                    const preview = document.getElementById('preview');
+                    preview.innerHTML = `<img src="${event.target.result}" alt="Preview">`;
+                };
+                reader.readAsDataURL(file);
+            }
+        });
+        
+        document.getElementById('uploadBtn').addEventListener('click', async function() {
+            const userId = document.getElementById('userId').value.trim();
+            const fileInput = document.getElementById('profileImage');
+            const resultDiv = document.getElementById('result');
+            
+            if (!userId) {
+                resultDiv.textContent = 'Error: User ID is required';
+                return;
+            }
+            
+            if (!fileInput.files || fileInput.files.length === 0) {
+                resultDiv.textContent = 'Error: Please select an image file';
+                return;
+            }
+            
+            const formData = new FormData();
+            formData.append('userId', userId);
+            formData.append('profileImage', fileInput.files[0]);
+            
+            // Log formData contents
+            console.log('FormData contents:');
+            for (let pair of formData.entries()) {
+                console.log(pair[0] + ': ' + (pair[1] instanceof File ? pair[1].name : pair[1]));
+            }
+            
+            resultDiv.textContent = 'Uploading...';
+            
+            try {
+                const response = await fetch('/images/upload', {
+                    method: 'POST',
+                    body: formData,
+                });
+                
+                const data = await response.json();
+                resultDiv.textContent = JSON.stringify(data, null, 2);
+                
+                if (data.success) {
+                    document.getElementById('preview').innerHTML += `
+                        <div style="margin-top: 10px">
+                            <strong>Uploaded Image URL:</strong><br>
+                            <a href="${data.imageUrl}" target="_blank">${data.imageUrl}</a>
+                        </div>
+                    `;
+                }
+            } catch (error) {
+                resultDiv.textContent = `Error: ${error.message}`;
+            }
+        });
+        
+        document.getElementById('testUpdateBtn').addEventListener('click', async function() {
+            const userId = document.getElementById('userId').value.trim();
+            const fileInput = document.getElementById('profileImage');
+            const resultDiv = document.getElementById('result');
+            
+            if (!userId) {
+                resultDiv.textContent = 'Error: User ID is required';
+                return;
+            }
+            
+            if (!fileInput.files || fileInput.files.length === 0) {
+                resultDiv.textContent = 'Error: Please select an image file';
+                return;
+            }
+            
+            const formData = new FormData();
+            formData.append('userId', userId);
+            formData.append('profileImage', fileInput.files[0]);
+            
+            resultDiv.textContent = 'Updating via PUT endpoint...';
+            
+            try {
+                const response = await fetch(`/images/${userId}`, {
+                    method: 'PUT',
+                    body: formData,
+                });
+                
+                const data = await response.json();
+                resultDiv.textContent = JSON.stringify(data, null, 2);
+                
+                if (data.success) {
+                    document.getElementById('preview').innerHTML += `
+                        <div style="margin-top: 10px">
+                            <strong>Updated Image URL:</strong><br>
+                            <a href="${data.imageUrl}" target="_blank">${data.imageUrl}</a>
+                        </div>
+                    `;
+                }
+            } catch (error) {
+                resultDiv.textContent = `Error: ${error.message}`;
+            }
+        });
+
+        // Add a third button for URL query string approach
+        const alternativeButton = document.createElement('button');
+        alternativeButton.textContent = 'Upload with Query Param';
+        alternativeButton.style.marginLeft = '10px';
+        document.getElementById('uploadBtn').parentNode.insertBefore(alternativeButton, document.getElementById('testUpdateBtn'));
+        
+        alternativeButton.addEventListener('click', async function() {
+            const userId = document.getElementById('userId').value.trim();
+            const fileInput = document.getElementById('profileImage');
+            const resultDiv = document.getElementById('result');
+            
+            if (!userId) {
+                resultDiv.textContent = 'Error: User ID is required';
+                return;
+            }
+            
+            if (!fileInput.files || fileInput.files.length === 0) {
+                resultDiv.textContent = 'Error: Please select an image file';
+                return;
+            }
+            
+            const formData = new FormData();
+            formData.append('profileImage', fileInput.files[0]);
+            
+            resultDiv.textContent = 'Uploading with userId in query param...';
+            
+            try {
+                // Use query parameter instead of form field
+                const response = await fetch(`/images/upload?userId=${userId}`, {
+                    method: 'POST',
+                    body: formData,
+                });
+                
+                const data = await response.json();
+                resultDiv.textContent = JSON.stringify(data, null, 2);
+                
+                if (data.success) {
+                    document.getElementById('preview').innerHTML += `
+                        <div style="margin-top: 10px">
+                            <strong>Uploaded Image URL:</strong><br>
+                            <a href="${data.imageUrl}" target="_blank">${data.imageUrl}</a>
+                        </div>
+                    `;
+                }
+            } catch (error) {
+                resultDiv.textContent = `Error: ${error.message}`;
+            }
+        });
+    </script>
+</body>
+</html> 

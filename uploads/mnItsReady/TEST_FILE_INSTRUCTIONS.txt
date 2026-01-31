@@ -1,0 +1,16 @@
+
+TEST FILE UPLOAD INSTRUCTIONS
+============================
+This test file has been generated with proper 837P format for MN-ITS.
+To test the upload:
+
+1. Connect to the required VPN
+2. Navigate to: https://mn-its-atst.dhs.state.mn.us/gatewayweb/login
+3. Login with your credentials: accepttest@A634637200
+4. Go to "Submit Transactions"
+5. Select "X12" as the file type
+6. Upload the file: test_connection_1747152903807.dat
+
+After confirming the upload works, you can implement the manual workflow
+or further investigate API options for automation.
+        

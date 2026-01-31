@@ -1,0 +1,34 @@
+ISA*00*          *00*          *ZZ*undefined     *30*000000         *20250208*0000*^*00501*111111299*1*P*:~
+GS*HC*undefined*000000*20250208*0000*111111299*X*005010X222A1~
+ST*837*0001*005010X222A1~
+BHT*0019*00*111111299*20250208*0000*CH~
+NM1*41*2*undefined*****46*undefined~
+PER*IC**TE*~
+NM1*40*2*Waystar*****46*000000~
+HL*1**20*1~
+PRV*BI*PXC*~
+NM1*85*2*undefined*****XX*undefined~
+N3*~
+N4***~
+REF*EI*~
+HL*2*1*22*0~
+SBR*P*18*******CI~
+NM1*IL*1*undefined*undefined****MI*undefined~
+N3*~
+N4***~
+DMG*D8*U~
+NM1*PR*2*undefined*****PI*undefined~
+REF*G2*~
+CLM*undefined*undefined***11:B:1*N*A*Y*Y*P~
+REF*EA*~
+HI*ABK:undefined~
+NM1*82*2*undefined*****XX*ATYPICAL~
+REF*G2*~
+LX*1~
+SV1*HC:H2015:U8:::Housing Transition*402.02*UN*23***1~
+DTP*472*D8*20250204~
+REF*6R*~
+CLP*undefined*1*undefined*undefined**undefined~
+SE*29*0001~
+GE*1*111111299~
+IEA*1*111111299~
