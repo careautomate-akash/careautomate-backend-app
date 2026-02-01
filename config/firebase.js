@@ -20,7 +20,23 @@ if (!admin.apps.length) {
       console.error('Failed to parse FIREBASE_SERVICE_ACCOUNT:', error);
       throw error;
     }
-  } 
+  }
+  // Support providing a path to the service account file
+  else if (process.env.FIREBASE_SERVICE_ACCOUNT_PATH) {
+    try {
+      const saPath = process.env.FIREBASE_SERVICE_ACCOUNT_PATH;
+      const resolvedPath = saPath.startsWith('/') || /^[A-Za-z]:\\/.test(saPath)
+        ? saPath
+        : join(__dirname, '..', saPath);
+      const serviceAccount = JSON.parse(readFileSync(resolvedPath, 'utf8'));
+      admin.initializeApp({
+        credential: admin.credential.cert(serviceAccount),
+      });
+    } catch (error) {
+      console.error('Failed to read or parse FIREBASE_SERVICE_ACCOUNT_PATH file:', error);
+      throw error;
+    }
+  }
   // Fallback to file (for local development)
   else {
     try {
