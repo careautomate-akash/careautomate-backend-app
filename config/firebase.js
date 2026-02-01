@@ -6,6 +6,8 @@ import { dirname, join } from 'path';
 // Get current directory for ES modules
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
+console.log('Firebase Admin SDK initialized successfully.');
+
 
 // Initialize Firebase Admin SDK
 if (!admin.apps.length) {
