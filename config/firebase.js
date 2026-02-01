@@ -6,7 +6,6 @@ import { dirname, join } from 'path';
 // Get current directory for ES modules
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
-console.log('Firebase Admin SDK initialized successfully.');
 
 
 // Initialize Firebase Admin SDK
@@ -18,6 +17,7 @@ if (!admin.apps.length) {
       admin.initializeApp({
         credential: admin.credential.cert(serviceAccount),
       });
+      console.log('Firebase Admin SDK initialized successfully using FIREBASE_SERVICE_ACCOUNT.');
     } catch (error) {
       console.error('Failed to parse FIREBASE_SERVICE_ACCOUNT:', error);
       throw error;
@@ -34,6 +34,7 @@ if (!admin.apps.length) {
       admin.initializeApp({
         credential: admin.credential.cert(serviceAccount),
       });
+      console.log(`Firebase Admin SDK initialized successfully using FIREBASE_SERVICE_ACCOUNT_PATH=${resolvedPath}`);
     } catch (error) {
       console.error('Failed to read or parse FIREBASE_SERVICE_ACCOUNT_PATH file:', error);
       throw error;
@@ -48,8 +49,9 @@ if (!admin.apps.length) {
       admin.initializeApp({
         credential: admin.credential.cert(serviceAccount),
       });
+      console.log('Firebase Admin SDK initialized successfully using serviceAccountKey.json fallback.');
     } catch (error) {
-      console.error('Firebase service account file not found. Please set FIREBASE_SERVICE_ACCOUNT environment variable or ensure serviceAccountKey.json exists.');
+      console.error('Firebase service account file not found. Please set FIREBASE_SERVICE_ACCOUNT or FIREBASE_SERVICE_ACCOUNT_PATH, or ensure serviceAccountKey.json exists at:', join(__dirname, '../serviceAccountKey.json'));
       throw error;
     }
   }
