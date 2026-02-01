@@ -13,11 +13,6 @@ RUN npm install
 # Copy the rest of the app
 COPY . .
 
-# If you have a local Firebase service account JSON and want it included in the image,
-# uncomment or provide `serviceAccountKey.json` in the build context. For secrets it's
-# recommended to mount at runtime or use a secrets manager instead of baking into image.
-COPY serviceAccountKey.json /app/serviceAccountKey.json
-ENV FIREBASE_SERVICE_ACCOUNT_PATH=/app/serviceAccountKey.json
 
 # Accept build-time args for secrets and config
 ARG PORT
