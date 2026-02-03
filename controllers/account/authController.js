@@ -129,7 +129,7 @@ export const loginController = async (req, res) => {
 };
 
 export const registerController = async (req, res) => {
-  const { name, email, password, phoneNo, companyName, state, role, subscription_type } = req.body;
+  const { name, email, password, phoneNo, companyName, state, role, subscription_type, addressLine1, addressLine2, city, zipCode } = req.body;
 
   try {
     let error = {};
@@ -176,14 +176,27 @@ export const registerController = async (req, res) => {
     const hashedPassword = await bcrypt.hash(password, 10);
 
     // Create a new User record with info_id
-    let newUser = new users({
+    let newUserData = {
       name: toTitleCase(name),
       email,
       password: hashedPassword,
       phoneNo,
       state,
       role,
-    });
+    };
+
+    // Add address to user if provided
+    if (addressLine1 || addressLine2 || city || state || zipCode) {
+      newUserData.address = {
+        ...(addressLine1 !== undefined && { addressLine1 }),
+        ...(addressLine2 !== undefined && { addressLine2 }),
+        ...(city !== undefined && { city }),
+        ...(state !== undefined && { state }),
+        ...(zipCode !== undefined && { zipCode }),
+      };
+    }
+
+    let newUser = new users(newUserData);
     await newUser.save();
 
     const settingsDocument = new settings({
@@ -194,12 +207,25 @@ export const registerController = async (req, res) => {
 
     let companyRecord;
     if (role === 2 || role === 3) {
-      companyRecord = new company({
+      const companyData = {
         adminId: newUser._id,
         companyName: companyName,
         adminName: name,
         adminEmail: email,
-      });
+      };
+
+      // Add address information if provided
+      if (addressLine1 || addressLine2 || city || state || zipCode) {
+        companyData.address = {
+          ...(addressLine1 && { addressLine1 }),
+          ...(addressLine2 && { addressLine2 }),
+          ...(city && { city }),
+          ...(state && { state }),
+          ...(zipCode && { zipCode }),
+        };
+      }
+
+      companyRecord = new company(companyData);
       await companyRecord.save();
 
       newUser.companyId = companyRecord._id;

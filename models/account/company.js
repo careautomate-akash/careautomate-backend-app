@@ -29,6 +29,11 @@ const companySchema = new mongoose.Schema({
   taxId: {
     type: String,
   },
-});
+
+},
+  {
+    timestamps: true, // ✅ adds createdAt & updatedAt
+  }
+);
 
 export default mongoose.model('company', companySchema);

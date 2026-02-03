@@ -7,6 +7,7 @@ import {
   getAllVisitsCount,
   getAllAppointmentsCount,
   getAllTenantsCount,
+  getCompanyReportForEdit,
 } from '../../controllers/account/superAdminController.js';
 import { authenticateToken } from '../../middleware/auth.js';
 import { superAdminMiddleware } from '../../middleware/superadminmiddleware.js';
@@ -17,13 +18,14 @@ const router = express.Router();
 
 
 //superadmin reports
-router.get('/get-company-reports', authenticateToken,superAdminMiddleware, getCompanyReports);
+router.get('/get-company-reports', authenticateToken, superAdminMiddleware, getCompanyReports);
+router.get('/get-company-reports/:companyId', authenticateToken, superAdminMiddleware, getCompanyReportForEdit);
 
 //update company data
-router.put('/update-company-data/', authenticateToken,superAdminMiddleware, updateCompanyData);
+router.put('/update-company-data/', authenticateToken, superAdminMiddleware, updateCompanyData);
 
 //delete company
-router.delete('/delete-company/:companyId', authenticateToken,superAdminMiddleware, deleteCompany);
+router.delete('/delete-company/:companyId', authenticateToken, superAdminMiddleware, deleteCompany);
 
 //superadmin data
 router.get(
@@ -34,7 +36,7 @@ router.get(
 );
 
 //visits count of all companies
-router.get('/get-all-visits-count', authenticateToken,superAdminMiddleware, getAllVisitsCount);
+router.get('/get-all-visits-count', authenticateToken, superAdminMiddleware, getAllVisitsCount);
 export default router;
 
 //appointments count of all companies
@@ -46,4 +48,4 @@ router.get(
 );
 
 //appointments count of all companies
-router.get('/get-all-tenants-count', authenticateToken,superAdminMiddleware, getAllTenantsCount);
+router.get('/get-all-tenants-count', authenticateToken, superAdminMiddleware, getAllTenantsCount);

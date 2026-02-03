@@ -12,11 +12,10 @@ const getCompanyReports = async (req, res) => {
   try {
     // Fetch all companies, users, and child admin accounts in parallel
     const [companies, allUsers, allChildAdminAccounts] = await Promise.all([
-      Company.find().lean(),
+      Company.find().sort({ createdAt: -1 }).lean(),
       Users.find().lean(),
       childAdminAccount.find().lean(),
     ]);
-
     if (companies.length === 0) {
       return res
         .status(400)
@@ -214,15 +213,10 @@ const updateCompanyData = async (req, res) => {
         .json({ success: false, message: 'Admin not found' });
     }
 
-    console.log('=== UPDATE CLIENT DETAILS DEBUG ===');
-    console.log('Current subscription_status:', admin.subscription_status);
-    console.log('Received subscription_type:', subscription_type);
-    console.log('Received subscription_status:', subscription_status);
+
 
     // Normalize field names (accept both formats from frontend)
     const subscriptionStatus = subscription_status || subscription_type;
-    console.log('Final subscriptionStatus to use:', subscriptionStatus);
-
     const primaryEmailAddr = primaryEmailAddress || primaryEmail;
     const alternateEmailAddr = alternateEmailAddress || alternateEmail;
     const npiUmpiValue = idnpiUmpi || npiUmpi;
@@ -245,31 +239,11 @@ const updateCompanyData = async (req, res) => {
 
     console.log('Bank details extracted:', { bankName, bankCard, bankExpiry });
 
-    // Validate bank details if subscription status is being set to 'subscribed'
+    // Previously we enforced bank details for 'subscribed' status.
+    // That validation is intentionally skipped now so admins can be set
+    // to 'subscribed' without providing bank details in this payload.
     if (subscriptionStatus === 'subscribed') {
-      // Check existing accountSetup for bank details
-      const existingAccountSetup = await accountSetup.findOne({ adminId });
-
-      const missingBankFields = [];
-      if (!bankName && !existingAccountSetup?.bankingInfo?.nameOnCard) {
-        missingBankFields.push('nameOnCard');
-      }
-      if (!bankCard && !existingAccountSetup?.bankingInfo?.cardNumber) {
-        missingBankFields.push('cardNumber');
-      }
-      if (!bankExpiry && !existingAccountSetup?.bankingInfo?.expiryDate) {
-        missingBankFields.push('expiryDate');
-      }
-
-      if (missingBankFields.length > 0) {
-        console.log('Missing bank fields:', missingBankFields);
-        return res.status(400).json({
-          success: false,
-          message: 'Bank details are required for subscribed status',
-          missingFields: missingBankFields,
-        });
-      }
-      console.log('Bank validation passed!');
+      console.log('Subscription set to subscribed; skipping bank-field validation');
     }
 
     // Prepare updated user fields
@@ -283,6 +257,19 @@ const updateCompanyData = async (req, res) => {
     if (state !== undefined) updatedAdmin.state = state;
     if (city !== undefined) updatedAdmin.city = city;
     if (timezone !== undefined) updatedAdmin.timezone = timezone;
+
+    // Also add address to admin if address fields provided
+    const normalizedCityForAdmin = city || companyCity;
+    if (addressLine1 || addressLine2 || normalizedCityForAdmin || state || zipCode) {
+      updatedAdmin.address = {
+        ...(admin.address || {}),
+        ...(addressLine1 !== undefined && { addressLine1 }),
+        ...(addressLine2 !== undefined && { addressLine2 }),
+        ...(normalizedCityForAdmin !== undefined && { city: normalizedCityForAdmin }),
+        ...(state !== undefined && { state }),
+        ...(zipCode !== undefined && { zipCode }),
+      };
+    }
 
     // Handle subscription status updates
     if (subscriptionStatus !== undefined) {
@@ -397,37 +384,65 @@ const updateCompanyData = async (req, res) => {
     console.log('Updated admin subscription_status:', updatedAdminDocument.subscription_status);
     console.log('Admin document updated successfully!');
 
-    // Update company information if provided and admin has a company
+    // Update company information if provided. If admin has no company yet,
+    // create one when company fields are supplied.
     let updatedCompany = null;
+
+    const companyUpdateData = {};
+    if (companyName !== undefined) companyUpdateData.companyName = companyName;
+    if (adminName !== undefined) companyUpdateData.adminName = adminName;
+    if (adminEmail !== undefined) companyUpdateData.adminEmail = adminEmail;
+    if (taxId !== undefined || federalTaxId !== undefined) {
+      companyUpdateData.taxId = taxId || federalTaxId;
+    }
+
+    // Normalize city: accept either `city` or `companyCity` from payload
+    const normalizedCity = city || companyCity;
+
+    // Merge address updates if any address field is present
+    if (addressLine1 || addressLine2 || normalizedCity || state || zipCode) {
+      // If updating an existing company, preserve existing address fields
+      const existingCompany = admin.companyId
+        ? await Company.findById(admin.companyId)
+        : null;
+
+      companyUpdateData.address = {
+        ...(existingCompany?.address || {}),
+        ...(addressLine1 !== undefined && { addressLine1 }),
+        ...(addressLine2 !== undefined && { addressLine2 }),
+        ...(normalizedCity !== undefined && { city: normalizedCity }),
+        ...(state !== undefined && { state }),
+        ...(zipCode !== undefined && { zipCode }),
+      };
+    }
+
     if (admin.companyId) {
-      const companyUpdateData = {};
-
-      if (companyName) companyUpdateData.companyName = companyName;
-      if (adminName) companyUpdateData.adminName = adminName;
-      if (adminEmail) companyUpdateData.adminEmail = adminEmail;
-      if (taxId !== undefined || federalTaxId !== undefined) {
-        companyUpdateData.taxId = taxId || federalTaxId;
-      }
-
-      // Update company address if any address field is provided
-      const existingCompany = await Company.findById(admin.companyId);
-      if (addressLine1 || addressLine2 || city || state || zipCode) {
-        companyUpdateData.address = {
-          ...(existingCompany?.address || {}),
-          ...(addressLine1 !== undefined && { addressLine1 }),
-          ...(addressLine2 !== undefined && { addressLine2 }),
-          ...(city !== undefined && { city }),
-          ...(state !== undefined && { state }),
-          ...(zipCode !== undefined && { zipCode }),
-        };
-      }
-
       if (Object.keys(companyUpdateData).length > 0) {
         updatedCompany = await Company.findByIdAndUpdate(
           admin.companyId,
           companyUpdateData,
           { new: true }
         );
+      }
+    } else {
+      // If admin has no company yet but company data was provided, create it
+      if (Object.keys(companyUpdateData).length > 0) {
+        // ensure adminId is set on created company
+        const companyDataToCreate = {
+          adminId: admin._id,
+          adminName: companyUpdateData.adminName || admin.name,
+          adminEmail: companyUpdateData.adminEmail || admin.email,
+          companyName: companyUpdateData.companyName || undefined,
+          ...(companyUpdateData.taxId !== undefined && { taxId: companyUpdateData.taxId }),
+          ...(companyUpdateData.address !== undefined && { address: companyUpdateData.address }),
+        };
+
+        updatedCompany = await Company.create(companyDataToCreate);
+
+        // attach new company to admin
+        admin.companyId = updatedCompany._id;
+        admin.companyName = updatedCompany.companyName || admin.companyName;
+        await admin.save();
       }
     }
 
@@ -747,6 +762,135 @@ const getAllTenantsCount = async (req, res) => {
   }
 };
 
+// Get Single Company Report for Editing
+const getCompanyReportForEdit = async (req, res) => {
+  try {
+    const { companyId } = req.params;
+
+    // Validate companyId
+    if (!companyId) {
+      return res.status(400).json({
+        success: false,
+        message: 'Company ID is required',
+      });
+    }
+
+    // Validate if companyId is a valid MongoDB ObjectId
+    if (!mongoose.Types.ObjectId.isValid(companyId)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid company ID format',
+      });
+    }
+
+    // Fetch company
+    const company = await Company.findById(companyId).lean();
+
+    if (!company) {
+      return res.status(404).json({
+        success: false,
+        message: 'Company not found',
+      });
+    }
+
+    // Fetch all users for this company
+    const allUsers = await Users.find({ companyId }).lean();
+
+    // Find admin, tenants, and HCMs
+    let admin = null;
+    const tenants = [];
+    const hcms = [];
+
+    allUsers.forEach((user) => {
+      if (user.role === 2 && !admin) {
+        admin = user;
+      } else if (user.role === 0) {
+        tenants.push({
+          _id: user._id,
+          name: user.name,
+          email: user.email,
+          phoneNo: user.phoneNo,
+          dateCreated: user.dateCreated,
+          companyId: user.companyId,
+        });
+      } else if (user.role === 1) {
+        hcms.push({
+          _id: user._id,
+          name: user.name,
+          email: user.email,
+          phoneNo: user.phoneNo,
+        });
+      }
+    });
+
+    if (!admin) {
+      return res.status(404).json({
+        success: false,
+        message: 'Company admin not found',
+      });
+    }
+
+    // Fetch child admin accounts
+
+    // Format admin details (use address subdocument when available)
+    const adminDetails = {
+      _id: admin._id,
+      name: admin.name,
+      email: admin.email,
+      phoneNo: admin.phoneNo,
+      password: admin.password,
+      confirmPassword: admin.password,
+      createdAt: admin.createdAt,
+      companyId: admin.companyId,
+      address: admin.address || {},
+      addressLine1: admin.address?.addressLine1 || '',
+      addressLine2: admin.address?.addressLine2 || '',
+      city: admin.address?.city || admin.city || '',
+      state: admin.address?.state || admin.state || '',
+      zipCode: admin.address?.zipCode || admin.zipCode || '',
+      subscription_status: admin.subscription_status || 'trial',
+      trial_start_date: admin.trial_start_date,
+      trial_end_date: admin.trial_end_date,
+      subscription_start_date: admin.subscription_start_date,
+      subscription_end_date: admin.subscription_end_date,
+      is_active: admin.is_active !== undefined ? admin.is_active : true,
+    };
+
+    // Build complete company report
+    const companyReport = {
+      company: {
+        id: company._id,
+        name: company.companyName,
+        address: company.address,
+        addressLine1: company.address?.addressLine1 || admin.address?.addressLine1 || '',
+        addressLine2: company.address?.addressLine2 || admin.address?.addressLine2 || '',
+        city: company.address?.city || admin.address?.city || admin.city || '',
+        state: company.address?.state || admin.address?.state || admin.state || '',
+        zipCode: company.address?.zipCode || admin.address?.zipCode || '',
+        phone: company.phone,
+        website: company.website,
+        industry: company.industry,
+        taxId: company.taxId,
+        createdAt: company.createdAt,
+      },
+      admin: adminDetails,
+    };
+
+    return res.status(200).json({
+      success: true,
+      message: 'Company report fetched successfully',
+      response: companyReport,
+    });
+  } catch (error) {
+    console.error('Error fetching company report for edit:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Error fetching company report',
+      error: error.message || error,
+    });
+  }
+};
+
 export {
   getCompanyReports,
   updateCompanyData,
@@ -755,4 +899,5 @@ export {
   getAllVisitsCount,
   getAllAppointmentsCount,
   getAllTenantsCount,
+  getCompanyReportForEdit,
 };
